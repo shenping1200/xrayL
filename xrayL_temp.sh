@@ -1,21 +1,22 @@
 #!/bin/bash
 
 # ==================== 默认配置 ====================
-DEFAULT_START_PORT=20000
-DEFAULT_SOCKS_USERNAME="userb"
-DEFAULT_SOCKS_PASSWORD="passwordb"
-DEFAULT_WS_PATH="/ws"
-DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid)
+DEFAULT_START_PORT=20000                         #默认起始端口
+DEFAULT_SOCKS_USERNAME="userb"                   #默认socks账号
+DEFAULT_SOCKS_PASSWORD="passwordb"               #默认socks密码
+DEFAULT_WS_PATH="/ws"                            #默认ws路径
+DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
-# ==================== 功能函数 ====================
+# 这行代码已更新为只获取 IPv4 地址
 get_ip_addresses() {
     IP_ADDRESSES=()
     while read -r ip_address; do
-        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.|::1) ]]; then 
+        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.) ]]; then 
             IP_ADDRESSES+=("$ip_address")
         fi
-    done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1; ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1)
+    done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1)
 }
+get_ip_addresses
 
 cleanup() {
     echo "清理旧的 Xray 服务和文件..."
@@ -114,7 +115,6 @@ config_xray() {
         config_content+="inboundTag = \"tag_$((i + 1))\"\n"
         config_content+="outboundTag = \"tag_$((i + 1))\"\n\n\n"
     done
-    
     echo -e "$config_content" >/etc/xrayL/config.toml
     systemctl restart xrayL.service
     systemctl --no-pager status xrayL.service
