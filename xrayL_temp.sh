@@ -10,7 +10,8 @@ DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 get_ip_addresses() {
     IP_ADDRESSES=()
     while read -r ip_address; do
-        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.|::1) ]]; then # 忽略回环和私有地址
+        # 忽略回环地址和私有地址 (10.x.x.x, 172.16.x.x, 192.168.x.x)
+        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.|::1) ]]; then 
             IP_ADDRESSES+=("$ip_address")
         fi
     done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1; ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1)
@@ -100,57 +101,4 @@ config_xray() {
         elif [ "$config_type" == "vmess" ]; then
             config_content+="[[inbounds.settings.clients]]\n"
             config_content+="id = \"$UUID\"\n"
-            config_content+="[inbounds.streamSettings]\n"
-            config_content+="network = \"ws\"\n"
-            config_content+="[inbounds.streamSettings.wsSettings]\n"
-            config_content+="path = \"$WS_PATH\"\n\n"
-        fi
-        config_content+="[[outbounds]]\n"
-        config_content+="sendThrough = \"${IP_ADDRESSES[i]}\"\n"
-        config_content+="protocol = \"freedom\"\n"
-        config_content+="tag = \"tag_$((i + 1))\"\n\n"
-        config_content+="[[routing.rules]]\n"
-        config_content+="type = \"field\"\n"
-        config_content+="inboundTag = \"tag_$((i + 1))\"\n"
-        config_content+="outboundTag = \"tag_$((i + 1))\"\n\n\n"
-    done
-    echo -e "$config_content" >/etc/xrayL/config.toml
-    systemctl restart xrayL.service
-    systemctl --no-pager status xrayL.service
-    echo ""
-    echo "生成 $config_type 配置完成"
-    echo "起始端口:$START_PORT"
-    echo "结束端口:$(($START_PORT + ${#IP_ADDRESSES[@]} - 1))"
-    if [ "$config_type" == "socks" ]; then
-        echo "socks账号:$SOCKS_USERNAME"
-        echo "socks密码:$SOCKS_PASSWORD"
-    elif [ "$config_type" == "vmess" ]; then
-        echo "UUID:$UUID"
-        echo "ws路径:$WS_PATH"
-    fi
-    echo ""
-}
-main() {
-    cleanup # 在主函数开始时先进行清理
-    
-    if [ -x "$(command -v xrayL)" ] ; then
-        echo "XrayL已安装，跳过安装步骤。"
-    else
-        install_xray
-    fi
-
-    if [ $# -eq 1 ]; then
-        config_type="$1"
-    else
-        read -p "选择生成的节点类型 (socks/vmess): " config_type
-    fi
-    if [ "$config_type" == "vmess" ]; then
-        config_xray "vmess"
-    elif [ "$config_type" == "socks" ]; then
-        config_xray "socks"
-    else
-        echo "未正确选择类型，使用默认sokcs配置."
-        config_xray "socks"
-    fi
-}
-main "$@"
+            config_
