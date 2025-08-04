@@ -7,7 +7,7 @@ DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
 # 这行代码已更新为最稳定的方法，用于获取所有 IPv4 和 IPv6 地址
-IP_ADDRESSES=($(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}'; ip -6 addr show | grep -oP '(?<=inet6\s)[a-f0-9:]+'))
+IP_ADDRESSES=($(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1); $(ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1))
 
 cleanup() {
     echo "清理旧的 Xray 服务和文件..."
