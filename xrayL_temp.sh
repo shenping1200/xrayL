@@ -6,8 +6,8 @@ DEFAULT_SOCKS_PASSWORD="passwordb"               #默认socks密码
 DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
-# 这行代码已被修改，以确保获取所有 IPv4 和 IPv6 地址
-IP_ADDRESSES=($(ip -o -f inet addr show | awk '{print $4}' | cut -d/ -f1); $(ip -o -f inet6 addr show | awk '{print $4}' | cut -d/ -f1))
+# 这行代码已更新为最稳定的方法，用于获取所有 IPv4 和 IPv6 地址
+IP_ADDRESSES=($(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}'; ip -6 addr show | grep -oP '(?<=inet6\s)[a-f0-9:]+'))
 
 cleanup() {
     echo "清理旧的 Xray 服务和文件..."
@@ -112,7 +112,6 @@ config_xray() {
     echo ""
     echo "生成 $config_type 配置完成"
     echo "起始端口:$START_PORT"
-    # 这行代码已被修改，以正确计算结束端口
     echo "结束端口:$(($START_PORT + ${#IP_ADDRESSES[@]} - 1))"
     if [ "$config_type" == "socks" ]; then
         echo "socks账号:$SOCKS_USERNAME"
