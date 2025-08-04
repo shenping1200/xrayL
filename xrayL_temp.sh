@@ -6,11 +6,16 @@ DEFAULT_SOCKS_PASSWORD="passwordb"               #默认socks密码
 DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
-# 这行代码已更新为最稳定的方法，用于获取所有 IPv4 和 IPv6 地址
-IP_ADDRESSES=()
-while read -r line; do
-  IP_ADDRESSES+=("$line")
-done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1 | grep -v '^127.0.0.1$'; ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1 | grep -v '^::1$')
+# 这行代码已更新为最稳定的方法，用于获取所有 IPv4 和 IPv6 地址，并排除内部和回环地址
+get_ip_addresses() {
+    IP_ADDRESSES=()
+    while read -r ip_address; do
+        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.|::1) ]]; then # 忽略回环和私有地址
+            IP_ADDRESSES+=("$ip_address")
+        fi
+    done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1; ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1)
+}
+get_ip_addresses
 
 cleanup() {
     echo "清理旧的 Xray 服务和文件..."
