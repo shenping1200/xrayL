@@ -28,19 +28,18 @@ cleanup() {
 
 add_and_ping_ips_and_route() {
     echo "正在添加IP地址、路由并ping网关..."
-    GATEWAY_IPV6="2602:fd37:109::1"
-    # 你需要在这里添加你希望部署的所有IPv6地址
+    GATEWAY_IPV6="2602:fd37:109:a1::1"
     IPV6_TO_ADD=(
-        "2602:fd37:109:a1::b779:43f1:17dc:7de3"
-        "2602:fd37:109:a1::40e2:bfa7:4b37:5a20"
-        "2602:fd37:109:a1::fd26:1bf7:a812:69b6"
-        "2602:fd37:109:a1::c532:2604:6230:40a5"
-        "2602:fd37:109:a1::31d1:1a0e:3de4:1c1f"
-        "2602:fd37:109:a1::4280:efac:d7c4:eec1"
-        "2602:fd37:109:a1::63a2:f5e2:5675:8f03"
-        "2602:fd37:109:a1::ac94:d56b:a494:a449"
-        "2602:fd37:109:a1::cd75:ccd7:d0bf:824d"
-        "2602:fd37:109:a1::887a:d0b9:3511:b13f"
+        "2602:fd37:109:a1:e544:6966:45fb:e548"
+        "2602:fd37:109:a1:4151:81e5:a0d2:8013"
+        "2602:fd37:109:a1:836f:9a62:b5d0:73ca"
+        "2602:fd37:109:a1:5d3b:f9b7:1a26:9c00"
+        "2602:fd37:109:a1:aa3a:416e:2ba7:a90d"
+        "2602:fd37:109:a1:7630:a25d:bacb:f78f"
+        "2602:fd37:109:a1:6e34:a1c0:34b9:c3ca"
+        "2602:fd37:109:a1:2a2e:ea26:7e85:8058"
+        "2602:fd37:109:a1:83c2:e5fb:e091:4122"
+        "2602:fd37:109:a1:53d8:5bcf:718f:cb51"
     )
     
     # 清除旧的IPv6地址
@@ -50,7 +49,7 @@ add_and_ping_ips_and_route() {
     for ip in "${IPV6_TO_ADD[@]}"; do
         echo "添加IP和路由: $ip"
         sudo ip addr add "$ip"/64 dev eth0 &>/dev/null
-        sudo ip -6 route add default via "$GATEWAY_IPV6" dev eth0 &>/dev/null
+        sudo ip -6 route add default via "$GATEWAY_IPV6" dev eth0 onlink &>/dev/null
         sudo ping6 -c 3 -I "$ip" "$GATEWAY_IPV6" &>/dev/null
     done
     
