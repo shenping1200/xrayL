@@ -98,18 +98,19 @@ config_xray() {
         echo "类型错误！仅支持socks和vmess."
         exit 1
     fi
-
-    read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT
+    
+    # 使用 < /dev/tty 强制从终端读取输入
+    read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT < /dev/tty
     START_PORT=${START_PORT:-$DEFAULT_START_PORT}
     if [ "$config_type" == "socks" ]; then
-        read -p "SOCKS 账号 (默认 $DEFAULT_SOCKS_USERNAME): " SOCKS_USERNAME
+        read -p "SOCKS 账号 (默认 $DEFAULT_SOCKS_USERNAME): " SOCKS_USERNAME < /dev/tty
         SOCKS_USERNAME=${SOCKS_USERNAME:-$DEFAULT_SOCKS_USERNAME}
-        read -p "SOCKS 密码 (默认 $DEFAULT_SOCKS_PASSWORD): " SOCKS_PASSWORD
+        read -p "SOCKS 密码 (默认 $DEFAULT_SOCKS_PASSWORD): " SOCKS_PASSWORD < /dev/tty
         SOCKS_PASSWORD=${SOCKS_PASSWORD:-$DEFAULT_SOCKS_PASSWORD}
     elif [ "$config_type" == "vmess" ]; then
-        read -p "UUID (默认随机): " UUID
+        read -p "UUID (默认随机): " UUID < /dev/tty
         UUID=${UUID:-$DEFAULT_UUID}
-        read -p "WebSocket 路径 (默认 $DEFAULT_WS_PATH): " WS_PATH
+        read -p "WebSocket 路径 (默认 $DEFAULT_WS_PATH): " WS_PATH < /dev/tty
         WS_PATH=${WS_PATH:-$DEFAULT_WS_PATH}
     fi
     
@@ -178,7 +179,7 @@ main() {
     if [ $# -eq 1 ]; then
         config_type="$1"
     else
-        read -p "选择生成的节点类型 (socks/vmess): " config_type
+        read -p "选择生成的节点类型 (socks/vmess): " config_type < /dev/tty
     fi
     
     if [ "$config_type" == "vmess" ]; then
