@@ -26,21 +26,9 @@ cleanup() {
     rm -f /usr/local/bin/xrayL &>/dev/null
 }
 
-add_and_ping_ips_and_route() {
-    echo "正在添加IP地址、路由并ping网关..."
-    GATEWAY_IPV6="2602:fd37:109:a1::1"
-    IPV6_TO_ADD=(
-        "2602:fd37:109:a1:e544:6966:45fb:e548"
-        "2602:fd37:109:a1:4151:81e5:a0d2:8013"
-        "2602:fd37:109:a1:836f:9a62:b5d0:73ca"
-        "2602:fd37:109:a1:5d3b:f9b7:1a26:9c00"
-        "2602:fd37:109:a1:aa3a:416e:2ba7:a90d"
-        "2602:fd37:109:a1:7630:a25d:bacb:f78f"
-        "2602:fd37:109:a1:6e34:a1c0:34b9:c3ca"
-        "2602:fd37:109:a1:2a2e:ea26:7e85:8058"
-        "2602:fd37:109:a1:83c2:e5fb:e091:4122"
-        "2602:fd37:109:a1:53d8:5bcf:718f:cb51"
-    )
+add_and_route_ips() {
+    echo "正在添加IP地址和路由..."
+    GATEWAY_IPV6="2602:fd37:109::1" # 更新为正确的网关地址
     
     # 清除旧的IPv6地址
     sudo ip -6 addr flush dev eth0 &>/dev/null
@@ -53,7 +41,7 @@ add_and_ping_ips_and_route() {
         sudo ping6 -c 3 -I "$ip" "$GATEWAY_IPV6" &>/dev/null
     done
     
-    echo "IP地址、路由添加和激活完成。"
+    echo "IP地址和路由添加完成。"
 }
 
 install_xray() {
@@ -98,7 +86,6 @@ config_xray() {
         exit 1
     fi
     
-    # 使用 < /dev/tty 强制从终端读取输入
     read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT < /dev/tty
     START_PORT=${START_PORT:-$DEFAULT_START_PORT}
     if [ "$config_type" == "socks" ]; then
