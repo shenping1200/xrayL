@@ -26,31 +26,29 @@ cleanup() {
     rm -f /usr/local/bin/xrayL &>/dev/null
 }
 
-add_and_ping_ips_and_route() {
-    echo "正在添加IP地址、路由并ping网关..."
-    GATEWAY_IPV6="2602:fd37:109:a1::1"
-    IPV6_TO_ADD=(
-        "2602:fd37:109:a1::b779:43f1:17dc:7de3"
-        "2602:fd37:109:a1::40e2:bfa7:4b37:5a20"
-        "2602:fd37:109:a1::fd26:1bf7:a812:69b6"
-        "2602:fd37:109:a1::c532:2604:6230:40a5"
-        "2602:fd37:109:a1::31d1:1a0e:3de4:1c1f"
-        "2602:fd37:109:a1::4280:efac:d7c4:eec1"
-        "2602:fd37:109:a1::63a2:f5e2:5675:8f03"
-        "2602:fd37:109:a1::ac94:d56b:a494:a449"
-        "2602:fd37:109:a1::cd75:ccd7:d0bf:824d"
-        "2602:fd37:109:a1::887a:d0b9:3511:b13f"
-    )
+add_and_route_ips() {
+    echo "正在添加IP地址和路由..."
+    GATEWAY_IPV6="2602:fd37:109::1"
     
+    # 询问用户添加多少个IP地址
+    read -p "请输入要添加的IPv6地址数量 (默认10个): " IP_COUNT_TO_ADD < /dev/tty
+    IP_COUNT_TO_ADD=${IP_COUNT_TO_ADD:-10}
+
     # 清除旧的IPv6地址
     sudo ip -6 addr flush dev eth0 &>/dev/null
     
     # 逐个添加IP、路由并ping网关
-    for ip in "${IPV6_TO_ADD[@]}"; do
-        echo "添加IP和路由: $ip"
-        sudo ip addr add "$ip"/64 dev eth0 &>/dev/null
+    for ((i=1; i<=IP_COUNT_TO_ADD; i++)); do
+        ip_hex_1=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
+        ip_hex_2=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
+        ip_hex_3=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
+        ip_hex_4=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
+        ip_full="2602:fd37:109:a1:${ip_hex_1}:${ip_hex_2}:${ip_hex_3}:${ip_hex_4}"
+        
+        echo "添加IP和路由: $ip_full"
+        sudo ip addr add "$ip_full"/64 dev eth0 &>/dev/null
         sudo ip -6 route add default via "$GATEWAY_IPV6" dev eth0 onlink &>/dev/null
-        sudo ping6 -c 3 -I "$ip" "$GATEWAY_IPV6" &>/dev/null
+        sudo ping6 -c 3 -I "$ip_full" "$GATEWAY_IPV6" &>/dev/null
     done
     
     echo "IP地址、路由添加和激活完成。"
