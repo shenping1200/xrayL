@@ -5,8 +5,8 @@
 #====================================================
 
 DEFAULT_START_PORT=30000                         #默认起始端口
-DEFAULT_SOCKS_USERNAME="120"                     #默认socks账号
-DEFAULT_SOCKS_PASSWORD="120"                     #默认socks密码
+DEFAULT_SOCKS_USERNAME="120"                   #默认socks账号
+DEFAULT_SOCKS_PASSWORD="120"               #默认socks密码
 DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
@@ -52,12 +52,12 @@ config_xray() {
     config_type=$1
     mkdir -p /etc/xrayL
     
-    if [ "$config_type" != "socks" ] && [ "$config_type" != "vmess" ] && [ "$config_type" != "single" ]; then
-        echo "类型错误！仅支持socks, vmess和single."
+    if [ "$config_type" != "socks" ] && [ "$config_type" != "vmess" ] && [ "$config_type" != "single" ] && [ "$config_type" != "socks-ipv4" ]; then
+        echo "类型错误！仅支持socks, vmess, single和socks-ipv4."
         exit 1
     fi
 	
-    if [ "$config_type" == "socks" ] || [ "$config_type" == "single" ]; then
+    if [ "$config_type" == "socks" ] || [ "$config_type" == "single" ] || [ "$config_type" == "socks-ipv4" ]; then
         read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT
         START_PORT=${START_PORT:-$DEFAULT_START_PORT}
         read -p "SOCKS 账号 (默认 $DEFAULT_SOCKS_USERNAME): " SOCKS_USERNAME
@@ -126,12 +126,17 @@ config_xray() {
         
         for ((i = 0; i < ${#IP_ADDRESSES[@]}; i++)); do
             config_content+="[[inbounds]]\n"
-            config_content+="listen = \"${IP_ADDRESSES[i]}\"\n"
+            if [ "$config_type" == "socks-ipv4" ]; then
+                config_content+="listen = \"$IPV4_ADDRESS\"\n"
+            else
+                config_content+="listen = \"${IP_ADDRESSES[i]}\"\n"
+            fi
+            
             config_content+="port = $((START_PORT + i))\n"
             config_content+="protocol = \"$config_type\"\n"
             config_content+="tag = \"tag_$((i + 1))\"\n"
             config_content+="[inbounds.settings]\n"
-            if [ "$config_type" == "socks" ]; then
+            if [ "$config_type" == "socks" ] || [ "$config_type" == "socks-ipv4" ]; then
                 config_content+="auth = \"password\"\n"
                 config_content+="udp = true\n"
                 config_content+="[[inbounds.settings.accounts]]\n"
@@ -173,7 +178,7 @@ config_xray() {
 	else
 		echo "起始端口:$START_PORT"
 		echo "结束端口:$(($START_PORT + ${#IP_ADDRESSES[@]} - 1))"
-		if [ "$config_type" == "socks" ]; then
+		if [ "$config_type" == "socks" ] || [ "$config_type" == "socks-ipv4" ]; then
 			echo "socks账号:$SOCKS_USERNAME"
 			echo "socks密码:$SOCKS_PASSWORD"
 		elif [ "$config_type" == "vmess" ]; then
@@ -189,7 +194,7 @@ main() {
 	if [ $# -eq 1 ]; then
 		config_type="$1"
 	else
-		read -p "选择生成的节点类型 (socks/vmess/single): " config_type
+		read -p "选择生成的节点类型 (socks/vmess/single/socks-ipv4): " config_type
 	fi
 	if [ "$config_type" == "vmess" ]; then
 		config_xray "vmess"
@@ -197,6 +202,8 @@ main() {
 		config_xray "socks"
 	elif [ "$config_type" == "single" ]; then
 		config_xray "single"
+	elif [ "$config_type" == "socks-ipv4" ]; then
+		config_xray "socks-ipv4"
 	else
 		echo "未正确选择类型，使用默认sokcs配置."
 		config_xray "socks"
