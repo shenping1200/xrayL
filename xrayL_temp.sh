@@ -133,23 +133,14 @@ config_xray() {
             fi
             
             config_content+="port = $((START_PORT + i))\n"
-            config_content+="protocol = \"$config_type\"\n"
+            config_content+="protocol = \"socks\"\n"
             config_content+="tag = \"tag_$((i + 1))\"\n"
             config_content+="[inbounds.settings]\n"
-            if [ "$config_type" == "socks" ] || [ "$config_type" == "socks-ipv4" ]; then
-                config_content+="auth = \"password\"\n"
-                config_content+="udp = true\n"
-                config_content+="[[inbounds.settings.accounts]]\n"
-                config_content+="user = \"$SOCKS_USERNAME\"\n"
-                config_content+="pass = \"$SOCKS_PASSWORD\"\n"
-            elif [ "$config_type" == "vmess" ]; then
-                config_content+="[[inbounds.settings.clients]]\n"
-                config_content+="id = \"$UUID\"\n"
-                config_content+="[inbounds.streamSettings]\n"
-                config_content+="network = \"ws\"\n"
-                config_content+="[inbounds.streamSettings.wsSettings]\n"
-                config_content+="path = \"$WS_PATH\"\n\n"
-            fi
+            config_content+="auth = \"password\"\n"
+            config_content+="udp = true\n"
+            config_content+="[[inbounds.settings.accounts]]\n"
+            config_content+="user = \"$SOCKS_USERNAME\"\n"
+            config_content+="pass = \"$SOCKS_PASSWORD\"\n"
             config_content+="[[outbounds]]\n"
             config_content+="sendThrough = \"${IP_ADDRESSES[i]}\"\n"
             config_content+="protocol = \"freedom\"\n"
