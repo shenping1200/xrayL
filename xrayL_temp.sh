@@ -1,75 +1,21 @@
 #!/bin/bash
 
-# ==================== 默认配置 ====================
 DEFAULT_START_PORT=20000                         #默认起始端口
 DEFAULT_SOCKS_USERNAME="userb"                   #默认socks账号
 DEFAULT_SOCKS_PASSWORD="passwordb"               #默认socks密码
 DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
-# ==================== 功能函数 ====================
-get_ip_addresses() {
-    IP_ADDRESSES=()
-    while read -r ip_address; do
-        if [[ ! "$ip_address" =~ ^(127\.|10\.|172\.|192\.|::1|fe80) ]]; then
-            IP_ADDRESSES+=("$ip_address")
-        fi
-    done < <(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1; ip -6 addr show | awk '/inet6 / {print $2}' | cut -d/ -f1)
-}
-
-cleanup() {
-    echo "清理旧的 Xray 服务和文件..."
-    systemctl stop xrayL.service &>/dev/null
-    systemctl disable xrayL.service &>/dev/null
-    rm -f /etc/systemd/system/xrayL.service &>/dev/null
-    rm -rf /etc/xrayL &>/dev/null
-    rm -f /usr/local/bin/xrayL &>/dev/null
-}
-
-add_and_route_ips() {
-    echo "正在添加IP地址和路由..."
-    GATEWAY_IPV6="2602:fd37:109::1"
-    
-    # 询问用户添加多少个IP地址
-    read -p "请输入要添加的IPv6地址数量 (默认10个): " IP_COUNT_TO_ADD < /dev/tty
-    IP_COUNT_TO_ADD=${IP_COUNT_TO_ADD:-10}
-
-    # 清除旧的IPv6地址
-    sudo ip -6 addr flush dev eth0 &>/dev/null
-    
-    # 逐个添加IP、路由并ping网关
-    for ((i=1; i<=IP_COUNT_TO_ADD; i++)); do
-        ip_hex_1=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
-        ip_hex_2=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
-        ip_hex_3=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
-        ip_hex_4=$(printf '%04x' $((RANDOM*RANDOM % 65536)))
-        ip_full="2602:fd37:109:a1:${ip_hex_1}:${ip_hex_2}:${ip_hex_3}:${ip_hex_4}"
-        
-        echo "添加IP和路由: $ip_full"
-        sudo ip addr add "$ip_full"/64 dev eth0 &>/dev/null
-        sudo ip -6 route add default via "$GATEWAY_IPV6" dev eth0 onlink &>/dev/null
-        sudo ping6 -c 3 -I "$ip_full" "$GATEWAY_IPV6" &>/dev/null
-    done
-    
-    echo "IP地址、路由添加和激活完成。"
-}
+IP_ADDRESSES=($(ip -6 addr show dev eth0 | grep "inet6" | awk '{print $2}' | cut -d'/' -f1 | grep -vE '^fe80|^::1$'))
 
 install_xray() {
-    echo "安装 Xray..."
-    cleanup 
-    
-    apt-get install unzip -y || yum install unzip -y
-    
-    mkdir -p /tmp/xray_install
-    cd /tmp/xray_install
-    
-    wget https://github.com/XTLS/Xray-core/releases/download/v1.8.3/Xray-linux-64.zip
-    unzip Xray-linux-64.zip
-    
-    mv xray /usr/local/bin/xrayL
-    chmod +x /usr/local/bin/xrayL
-    
-    cat > /etc/systemd/system/xrayL.service <<EOF
+	echo "安装 Xray..."
+	apt-get install unzip -y || yum install unzip -y
+	wget https://github.com/XTLS/Xray-core/releases/download/v1.8.3/Xray-linux-64.zip
+	unzip Xray-linux-64.zip
+	mv xray /usr/local/bin/xrayL
+	chmod +x /usr/local/bin/xrayL
+	cat <<EOF >/etc/systemd/system/xrayL.service
 [Unit]
 Description=XrayL Service
 After=network.target
@@ -83,109 +29,94 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 EOF
-    systemctl daemon-reload
-    systemctl start xrayL.service
-    echo "Xray 安装完成."
+	systemctl daemon-reload
+	systemctl enable xrayL.service
+	systemctl start xrayL.service
+	echo "Xray 安装完成."
 }
-
 config_xray() {
-    config_type=$1
-    mkdir -p /etc/xrayL
-    if [ "$config_type" != "socks" ] && [ "$config_type" != "vmess" ]; then
-        echo "类型错误！仅支持socks和vmess."
-        exit 1
-    fi
-    
-    read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT < /dev/tty
-    START_PORT=${START_PORT:-$DEFAULT_START_PORT}
-    if [ "$config_type" == "socks" ]; then
-        read -p "SOCKS 账号 (默认 $DEFAULT_SOCKS_USERNAME): " SOCKS_USERNAME < /dev/tty
-        SOCKS_USERNAME=${SOCKS_USERNAME:-$DEFAULT_SOCKS_USERNAME}
-        read -p "SOCKS 密码 (默认 $DEFAULT_SOCKS_PASSWORD): " SOCKS_PASSWORD < /dev/tty
-        SOCKS_PASSWORD=${SOCKS_PASSWORD:-$DEFAULT_SOCKS_PASSWORD}
-    elif [ "$config_type" == "vmess" ]; then
-        read -p "UUID (默认随机): " UUID < /dev/tty
-        UUID=${UUID:-$DEFAULT_UUID}
-        read -p "WebSocket 路径 (默认 $DEFAULT_WS_PATH): " WS_PATH < /dev/tty
-        WS_PATH=${WS_PATH:-$DEFAULT_WS_PATH}
-    fi
-    
-    config_content=""
-    local num_ips=${#IP_ADDRESSES[@]}
-    for ((i = 0; i < num_ips; i++)); do
-        config_content+="[[inbounds]]\n"
-        config_content+="port = $((START_PORT + i))\n"
-        config_content+="protocol = \"$config_type\"\n"
-        config_content+="tag = \"tag_$((i + 1))\"\n"
-        config_content+="[inbounds.settings]\n"
-        if [ "$config_type" == "socks" ]; then
-            config_content+="auth = \"password\"\n"
-            config_content+="udp = true\n"
-            config_content+="ip = \"${IP_ADDRESSES[i]}\"\n"
-            config_content+="[[inbounds.settings.accounts]]\n"
-            config_content+="user = \"$SOCKS_USERNAME\"\n"
-            config_content+="pass = \"$SOCKS_PASSWORD\"\n"
-        elif [ "$config_type" == "vmess" ]; then
-            config_content+="[[inbounds.settings.clients]]\n"
-            config_content+="id = \"$UUID\"\n"
-            config_content+="[inbounds.streamSettings]\n"
-            config_content+="network = \"ws\"\n"
-            config_content+="[inbounds.streamSettings.wsSettings]\n"
-            config_content+="path = \"$WS_PATH\"\n\n"
-        fi
-        config_content+="[[outbounds]]\n"
-        config_content+="sendThrough = \"${IP_ADDRESSES[i]}\"\n"
-        config_content+="protocol = \"freedom\"\n"
-        config_content+="tag = \"tag_$((i + 1))\"\n\n"
-        config_content+="[[routing.rules]]\n"
-        config_content+="type = \"field\"\n"
-        config_content+="inboundTag = \"tag_$((i + 1))\"\n"
-        config_content+="outboundTag = \"tag_$((i + 1))\"\n\n\n"
-    done
-    
-    echo -e "$config_content" >/etc/xrayL/config.toml
-    systemctl restart xrayL.service
-    systemctl --no-pager status xrayL.service
-    
-    echo ""
-    echo "生成 $config_type 配置完成"
-    echo "起始端口:$START_PORT"
-    echo "结束端口:$(($START_PORT + num_ips - 1))"
-    if [ "$config_type" == "socks" ]; then
-        echo "socks账号:$SOCKS_USERNAME"
-        echo "socks密码:$SOCKS_PASSWORD"
-    elif [ "$config_type" == "vmess" ]; then
-        echo "UUID:$UUID"
-        echo "ws路径:$WS_PATH"
-    fi
-    echo ""
-}
+	config_type=$1
+	mkdir -p /etc/xrayL
+	if [ "$config_type" != "socks" ] && [ "$config_type" != "vmess" ]; then
+		echo "类型错误！仅支持socks和vmess."
+		exit 1
+	fi
 
+	read -p "起始端口 (默认 $DEFAULT_START_PORT): " START_PORT
+	START_PORT=${START_PORT:-$DEFAULT_START_PORT}
+	if [ "$config_type" == "socks" ]; then
+		read -p "SOCKS 账号 (默认 $DEFAULT_SOCKS_USERNAME): " SOCKS_USERNAME
+		SOCKS_USERNAME=${SOCKS_USERNAME:-$DEFAULT_SOCKS_USERNAME}
+
+		read -p "SOCKS 密码 (默认 $DEFAULT_SOCKS_PASSWORD): " SOCKS_PASSWORD
+		SOCKS_PASSWORD=${SOCKS_PASSWORD:-$DEFAULT_SOCKS_PASSWORD}
+	elif [ "$config_type" == "vmess" ]; then
+		read -p "UUID (默认随机): " UUID
+		UUID=${UUID:-$DEFAULT_UUID}
+		read -p "WebSocket 路径 (默认 $DEFAULT_WS_PATH): " WS_PATH
+		WS_PATH=${WS_PATH:-$DEFAULT_WS_PATH}
+	fi
+
+	for ((i = 0; i < ${#IP_ADDRESSES[@]}; i++)); do
+		config_content+="[[inbounds]]\n"
+		config_content+="listen = \"${IP_ADDRESSES[i]}\"\n"
+		config_content+="port = $((START_PORT + i))\n"
+		config_content+="protocol = \"$config_type\"\n"
+		config_content+="tag = \"tag_$((i + 1))\"\n"
+		config_content+="[inbounds.settings]\n"
+		if [ "$config_type" == "socks" ]; then
+			config_content+="auth = \"password\"\n"
+			config_content+="udp = true\n"
+			config_content+="[[inbounds.settings.accounts]]\n"
+			config_content+="user = \"$SOCKS_USERNAME\"\n"
+			config_content+="pass = \"$SOCKS_PASSWORD\"\n"
+		elif [ "$config_type" == "vmess" ]; then
+			config_content+="[[inbounds.settings.clients]]\n"
+			config_content+="id = \"$UUID\"\n"
+			config_content+="[inbounds.streamSettings]\n"
+			config_content+="network = \"ws\"\n"
+			config_content+="[inbounds.streamSettings.wsSettings]\n"
+			config_content+="path = \"$WS_PATH\"\n\n"
+		fi
+		config_content+="[[outbounds]]\n"
+		config_content+="sendThrough = \"${IP_ADDRESSES[i]}\"\n"
+		config_content+="protocol = \"freedom\"\n"
+		config_content+="tag = \"tag_$((i + 1))\"\n\n"
+		config_content+="[[routing.rules]]\n"
+		config_content+="type = \"field\"\n"
+		config_content+="inboundTag = \"tag_$((i + 1))\"\n"
+		config_content+="outboundTag = \"tag_$((i + 1))\"\n\n\n"
+	done
+	echo -e "$config_content" >/etc/xrayL/config.toml
+	systemctl restart xrayL.service
+	systemctl --no-pager status xrayL.service
+	echo ""
+	echo "生成 $config_type 配置完成"
+	echo "起始端口:$START_PORT"
+	echo "结束端口:$(($START_PORT + $i - 1))"
+	if [ "$config_type" == "socks" ]; then
+		echo "socks账号:$SOCKS_USERNAME"
+		echo "socks密码:$SOCKS_PASSWORD"
+	elif [ "$config_type" == "vmess" ]; then
+		echo "UUID:$UUID"
+		echo "ws路径:$WS_PATH"
+	fi
+	echo ""
+}
 main() {
-    cleanup
-    add_and_ping_ips_and_route
-    get_ip_addresses
-    
-    if [ -x "$(command -v xrayL)" ] ; then
-        echo "XrayL已安装，跳过安装步骤。"
-    else
-        install_xray
-    fi
-
-    if [ $# -eq 1 ]; then
-        config_type="$1"
-    else
-        read -p "选择生成的节点类型 (socks/vmess): " config_type < /dev/tty
-    fi
-    
-    if [ "$config_type" == "vmess" ]; then
-        config_xray "vmess"
-    elif [ "$config_type" == "socks" ]; then
-        config_xray "socks"
-    else
-        echo "未正确选择类型，使用默认sokcs配置."
-        config_xray "socks"
-    fi
+	[ -x "$(command -v xrayL)" ] || install_xray
+	if [ $# -eq 1 ]; then
+		config_type="$1"
+	else
+		read -p "选择生成的节点类型 (socks/vmess): " config_type
+	fi
+	if [ "$config_type" == "vmess" ]; then
+		config_xray "vmess"
+	elif [ "$config_type" == "socks" ]; then
+		config_xray "socks"
+	else
+		echo "未正确选择类型，使用默认sokcs配置."
+		config_xray "socks"
+	fi
 }
-
 main "$@"
