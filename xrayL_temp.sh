@@ -5,8 +5,8 @@
 #====================================================
 
 DEFAULT_START_PORT=30000                         #默认起始端口
-DEFAULT_SOCKS_USERNAME="120"                   #默认socks账号
-DEFAULT_SOCKS_PASSWORD="120"               #默认socks密码
+DEFAULT_SOCKS_USERNAME="120"                     #默认socks账号
+DEFAULT_SOCKS_PASSWORD="120"                     #默认socks密码
 DEFAULT_WS_PATH="/ws"                            #默认ws路径
 DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid) #默认随机UUID
 
@@ -15,7 +15,15 @@ IPV4_ADDRESS=$(hostname -I | awk '{print $1}')
 
 install_xray() {
 	echo "安装 Xray..."
-	apt-get install unzip -y || yum install unzip -y
+	# 安装unzip
+	if ! command -v unzip &> /dev/null; then
+		if command -v apt-get &> /dev/null; then
+			apt-get update -y > /dev/null
+			apt-get install unzip -y
+		elif command -v yum &> /dev/null; then
+			yum install unzip -y
+		fi
+	fi
 	wget https://github.com/XTLS/Xray-core/releases/download/v1.8.3/Xray-linux-64.zip
 	unzip Xray-linux-64.zip
 	mv xray /usr/local/bin/xrayL
@@ -26,7 +34,7 @@ Description=XrayL Service
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/xrayL -c /etc/xrayL/config.toml
+ExecStart=/usr/local/bin/xrayL -c /etc/xrayL/config.json
 Restart=on-failure
 User=nobody
 RestartSec=3
@@ -43,7 +51,7 @@ EOF
 config_xray() {
     config_type=$1
     mkdir -p /etc/xrayL
-
+    
     if [ "$config_type" != "socks" ] && [ "$config_type" != "vmess" ] && [ "$config_type" != "single" ]; then
         echo "类型错误！仅支持socks, vmess和single."
         exit 1
@@ -66,43 +74,19 @@ config_xray() {
     config_content=""
 
     if [ "$config_type" == "single" ]; then
-        inbounds_config='
-        {
-          "listen": "'"$IPV4_ADDRESS"'",
-          "port": '$START_PORT',
-          "protocol": "socks",
-          "tag": "inbound-main",
-          "settings": {
-            "auth": "password",
-            "udp": true,
-            "accounts": [
-              {
-                "user": "'"$SOCKS_USERNAME"'",
-                "pass": "'"$SOCKS_PASSWORD"'"
-              }
-            ]
-          }
-        }
-        '
-        outbounds_config=""
+        inbounds_config='{"listen": "'"$IPV4_ADDRESS"'", "port": '$START_PORT', "protocol": "socks", "tag": "inbound-main", "settings": {"auth": "password", "udp": true, "accounts": [{"user": "'"$SOCKS_USERNAME"'", "pass": "'"$SOCKS_PASSWORD"'"}]}}'
+        
+        outbounds_json=""
         outbound_selectors=""
 
         for ((i = 0; i < ${#IP_ADDRESSES[@]}; i++)); do
-            outbounds_config+='
-            {
-              "protocol": "freedom",
-              "settings": {
-                "sendThrough": "'"${IP_ADDRESSES[i]}"'"
-              },
-              "tag": "out-ipv6-'$((i + 1))'"
-            },
-            '
-            outbound_selectors+='
-            "out-ipv6-'$((i + 1))'",
-            '
+            if [ $i -gt 0 ]; then
+                outbounds_json+=","
+                outbound_selectors+=","
+            fi
+            outbounds_json+='{"protocol": "freedom", "settings": {"sendThrough": "'"${IP_ADDRESSES[i]}"'"}, "tag": "out-ipv6-'$((i + 1))'"}'
+            outbound_selectors+='"out-ipv6-'$((i + 1))'"'
         done
-        outbounds_config=${outbounds_config%,}
-        outbound_selectors=${outbound_selectors%,}
         
         config_content='
         {
@@ -110,10 +94,10 @@ config_xray() {
             "loglevel": "warning"
           },
           "inbounds": [
-            '$inbound_config'
+            '$inbounds_config'
           ],
           "outbounds": [
-            '$outbounds_config'
+            '$outbounds_json'
           ],
           "routing": {
             "domainStrategy": "AsIs",
@@ -135,7 +119,11 @@ config_xray() {
           }
         }
         '
+        echo "$config_content" > /etc/xrayL/config.json
+        sed -i 's/\-c \/etc\/xrayL\/config\.toml/\-c \/etc\/xrayL\/config\.json/g' /etc/systemd/system/xrayL.service
     else
+        config_file_name="config.toml"
+        
         for ((i = 0; i < ${#IP_ADDRESSES[@]}; i++)); do
             config_content+="[[inbounds]]\n"
             config_content+="listen = \"${IP_ADDRESSES[i]}\"\n"
@@ -166,14 +154,9 @@ config_xray() {
             config_content+="inboundTag = \"tag_$((i + 1))\"\n"
             config_content+="outboundTag = \"tag_$((i + 1))\"\n\n\n"
         done
-    fi
-
-    if [ "$config_type" == "single" ]; then
-        echo "$config_content" | sed 's/^[ \t]*//g' | sed 's/[ \t]*$//g' > /etc/xrayL/config.json
-        sed -i 's/\.toml/\.json/g' /etc/systemd/system/xrayL.service
-    else
-        echo -e "$config_content" >/etc/xrayL/config.toml
-        sed -i 's/\.json/\.toml/g' /etc/systemd/system/xrayL.service
+        
+        echo -e "$config_content" >/etc/xrayL/$config_file_name
+        sed -i 's/\-c \/etc\/xrayL\/config\.json/\-c \/etc\/xrayL\/config\.toml/g' /etc/systemd/system/xrayL.service
     fi
 
 	systemctl daemon-reload
